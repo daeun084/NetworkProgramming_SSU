@@ -8,7 +8,7 @@ down_comment = 'You guessed too small!\n'
 end_comment = "User don't start Game! End the Connection\n"
 attempt_comment = 'The Attempt to play is over. End the connection\n'
 
-# flog for game
+# flag for game
 game = False
 
 MAX_BYTES = 1024 * 1024
@@ -38,6 +38,7 @@ def server():
     # accept client socket
     try:
         sc, addr = s.accept()
+        # print address of client
         print('Accepted connection from {}:{}'.format(addr[0], addr[1]))
     except socket.error as e:
         print("Socket Accept Error:", e)
@@ -48,34 +49,32 @@ def server():
 
     # make random number
     x = random.randint(1, 10)
-    print("x=", x)
 
     # inform client about game and recv 'start'
-    while True:
-        sc.sendall('Guess the Number! Would you start the game?: '.encode('utf-8'))
+    sc.sendall('Guess the Number! Would you start the game?: '.encode('utf-8'))
 
-        try:
-            start_request, addr = sc.recvfrom(MAX_BYTES)
-            if start_request.decode('utf-8') == 'start':
-                # if client input start, start the game
-                global game
-                game = True
-            else:
-                # if client doesn't input start, end the connection
-                print(end_comment)
-                sc.sendall(end_comment.encode('utf-8'))
-                s.close()
-                sc.close()
-            break
+    try:
+        start_request, addr = sc.recvfrom(MAX_BYTES)
+        if start_request.decode('utf-8') == 'start':
+            # if client input start, start the game
+            global game
+            game = True
+        else:
+            # if client doesn't input start, end the connection
+            print(end_comment)
+            sc.sendall(end_comment.encode('utf-8'))
+            s.close()
+            sc.close()
 
-        except socket.error as e:
-            print("Socket Error while receiving message:", e)
+    except socket.error as e:
+        print("Socket Error while receiving message:", e)
 
     # start guess the number game
     while (game):
         # client attempt 5 over
         if count >= 5:
             game = False
+            # send message and end connection
             sc.sendall(attempt_comment.encode('utf-8'))
             print(attempt_comment)
             break
@@ -95,7 +94,7 @@ def server():
         # print guess number from client
         print("[Client's Guess Number]: ", guess)
 
-        # check the guess num and the random num
+        # compare the guess num and the random num
         if guess == x:
             sc.sendall(win_comment.encode('utf-8'))
             print('The Client win the Game. End the connection')

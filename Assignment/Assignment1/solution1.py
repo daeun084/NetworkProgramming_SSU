@@ -1,7 +1,7 @@
 import argparse
 import socket
 
-
+# dictionary for result
 result = {'query': '', 'country': '', 'regionName': '', 'city': '', 'lat': '', 'lon': ''}
 
 
@@ -10,13 +10,14 @@ def geocode(address):
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s_ip = 'ip-api.com'
+        s_port = '80'
     except socket.error as e:
         print("Socket Error:", e)
         exit(0)
 
     # connect socket connection
     try:
-        s.connect((s_ip, 80))
+        s.connect((s_ip, s_port))
     except socket.error as e:
         print("Socket Connection Error:", e)
         exit(0)
@@ -30,17 +31,18 @@ def geocode(address):
 
     # send request
     try:
+        # encode the request in 'utf-8'
         s.sendall(request.encode('utf-8'))
     except Exception as e:
-        # handle exception
-        print(f"Failed to send request: {e}")
+        print("Failed to send request:", e)
+        exit(0)
 
     # get response
     response = recvall(s)
+    response = response.decode('utf-8')
 
     # separate header and body
-    response_str = response.decode('utf-8')
-    header, body = response_str.split('\r\n\r\n', 1)
+    header, body = response.split('\r\n\r\n', 1)
 
     # parse body
     parse_result(body)
@@ -49,6 +51,7 @@ def geocode(address):
     print_result()
 
 
+# receive response data
 def recvall(sock):
     response = b''
 
@@ -59,11 +62,13 @@ def recvall(sock):
                 break
             response += data
         except socket.timeout:
+            # handle timeout error
             print("Timeout occurred while receiving data")
             break
     return response
 
 
+# parse body's data to result dictionary
 def parse_result(body):
     params = body.strip('{}').split(',')
     for param in params:
@@ -78,8 +83,8 @@ def parse_result(body):
             result.update({key: value})
 
 
+# print the result dictionary
 def print_result():
-    # print the result dictionary
     for key in result:
         print(f'{key} = {result.get(key)}')
 

@@ -25,6 +25,7 @@ def client():
 
         # decode response
         response = data.decode('utf-8')
+        # print the response
         print('Received modified message from server: ' + response)
 
     except socket.timeout:
