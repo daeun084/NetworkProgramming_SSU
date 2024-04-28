@@ -53,12 +53,25 @@ def client(cafile):
 
 
 def make_ssl_socket(s, cafile):
-    # make context
-    purpose = ssl.Purpose.CLIENT_AUTH
-    context = ssl.create_default_context(purpose, cafile=cafile)
+    try:
+        # make context
+        purpose = ssl.Purpose.CLIENT_AUTH
+        context = ssl.create_default_context(purpose, cafile=cafile)
 
-    # return client's wrapped socket
-    return context.wrap_socket(s, server_hostname='localhost')
+        # return client's wrapped socket
+        return context.wrap_socket(s, server_hostname='localhost')
+    except ssl.SSLCertVerificationError as e:
+        print("SSL Cert Verification Error:", e)
+        exit(0)
+    except ssl.SSLError as e:
+        print("SSL Error:", e)
+        exit(0)
+    except FileNotFoundError as e:
+        print("File Not Found Error:", e)
+        exit(0)
+    except Exception as e:
+        print("Error:", e)
+        exit(0)
 
 
 def make_socket():

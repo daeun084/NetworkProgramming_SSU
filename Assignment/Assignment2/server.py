@@ -1,8 +1,5 @@
-import random
-import socket
-import json
-import ssl
-import argparse
+import random, socket, json, ssl, argparse, zlib, pickle
+
 
 # comment for client
 win_comment = 'Congratulations, you did it.\n'
@@ -14,6 +11,7 @@ attempt_comment = "Sorry, you've used all your attempts!\n"
 guess_comment = '[Guess the number]: '
 invalid_input_error_comment = 'Invalid Guess Num. Try again\n'
 server_response_buffer = ''
+history_data = ''
 
 MAX_BYTES = 1024 * 1024
 
@@ -35,14 +33,20 @@ def server(cafile, certfile):
     sc = make_ssl_socket(sc, certfile, cafile)
 
     # inform client about game and recv 'start'
-    serialized_start_comment = dump_json(start_comment)
-    sc.sendall(serialized_start_comment)
+    send_to_client(sc, start_comment)
 
     try:
         deserialized_start_request = sc.recv(MAX_BYTES)
         start_request = load_json(deserialized_start_request)
+        save_history_data(start_request + '\n')
 
         if start_request == 'start':
+            # print history data
+            print("-----HISTORY START-----")
+            loaded_history_list = load_history()
+            print_history(loaded_history_list)
+            print("-----HISTORY END-----")
+
             # if client input start, start the number game
             guess_number_game(sc)
         else:
@@ -68,8 +72,7 @@ def guess_number_game(sc):
     # client attempt 5 under
     while count < 5:
         # send client for guess the number question
-        serialized_guess_request = dump_json(server_response_buffer + guess_comment)
-        sc.sendall(serialized_guess_request)
+        send_to_client(sc, server_response_buffer + guess_comment)
 
         # init response buffer
         server_response_buffer = ''
@@ -78,6 +81,7 @@ def guess_number_game(sc):
         try:
             response = sc.recv(MAX_BYTES)
             guess = int(load_json(response))
+            save_history_data(response.decode('utf-8') + '\n')
         except ValueError as e:
             invalid_input_error()
             continue
@@ -92,7 +96,7 @@ def guess_number_game(sc):
 
         # compare the guess num and the random num
         if guess == x:
-            sc.sendall(dump_json(win_comment))
+            send_to_client(sc, win_comment)
             print('The Client win the Game. End the connection')
             return
         elif guess < x:
@@ -105,23 +109,36 @@ def guess_number_game(sc):
 
     # if client's attempt is over
     if server_response_buffer == '':
-        sc.sendall(dump_json(attempt_comment))
+        send_to_client(sc, attempt_comment)
     else:
-        sc.sendall(dump_json(server_response_buffer + attempt_comment))
+        send_to_client(sc, server_response_buffer + attempt_comment)
     print(attempt_comment)
 
 
 def make_ssl_socket(sc, certfile, cafile):
-    # make context
-    purpose = ssl.Purpose.SERVER_AUTH
-    # specify the purpose and protocol
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=cafile)
-    context.purpose = purpose
-    context.check_hostname = False
-    context.load_cert_chain(certfile=certfile) # use PEM file
+    try:
+        # make context
+        purpose = ssl.Purpose.SERVER_AUTH
+        # specify the purpose and protocol
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=cafile)
+        context.purpose = purpose
+        context.check_hostname = False
+        context.load_cert_chain(certfile=certfile)  # use PEM file
 
-    # return server's wrapped socket
-    return context.wrap_socket(sc, server_side=True)
+        # return server's wrapped socket
+        return context.wrap_socket(sc, server_side=True)
+    except ssl.SSLCertVerificationError as e:
+        print("SSL Cert Verification Error:", e)
+        exit(0)
+    except ssl.SSLError as e:
+        print("SSL Error:", e)
+        exit(0)
+    except FileNotFoundError as e:
+        print("File Not Found Error:", e)
+        exit(0)
+    except Exception as e:
+        print("Error:", e)
+        exit(0)
 
 
 def make_socket():
@@ -193,18 +210,68 @@ def invalid_input_error():
     server_response_buffer += invalid_input_error_comment
 
 
+def print_history(history_list):
+    for history in history_list:
+        # decompress history string data
+        decompressed_history = zlib.decompress(history).decode('utf-8')
+        print("-----------------")
+        print(decompressed_history)
+        print("-----------------")
+
+
+def load_history():
+    try:
+        with open('h.pickle', 'rb') as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        print("File Not Found Error: h.pickle")
+        exit(0)
+    except Exception as e:
+        print("Error:", e)
+        exit(0)
+
+
+def save_history():
+    # load history list
+    loaded_history_list = load_history()
+    try:
+        with open('h.pickle', 'wb') as f:
+            # compress history string data
+            compressed_history = zlib.compress(history_data.encode('utf-8'))
+            # add recent log history
+            loaded_history_list.append(compressed_history)
+            # save history list
+            pickle.dump(loaded_history_list, f)
+    except FileNotFoundError:
+        print("File Not Found Error: h.pickle")
+        exit(0)
+    except Exception as e:
+        print("Error:", e)
+        exit(0)
+
+
 def close_socket(s, sc):
+    save_history()
     print("Connection Closed")
     sc.close()
     s.close()
 
 
 def end_connection(s, sc):
-    serialized_end_comment = dump_json(end_comment)
-    sc.sendall(serialized_end_comment)
+    send_to_client(sc, end_comment)
     print(end_comment)
     close_socket(s, sc)
     exit(0)
+
+
+def save_history_data(data):
+    global history_data
+    history_data += data
+
+
+def send_to_client(sc, data):
+    sc.sendall(dump_json(data))
+    save_history_data(data)
 
 
 if __name__ == '__main__':
