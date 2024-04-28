@@ -72,9 +72,10 @@ def guess_number_game(sc):
     # client attempt 5 under
     while count < 5:
         # send client for guess the number question
+        # use response buffer for send multiple comments
         send_to_client(sc, server_response_buffer + guess_comment)
 
-        # init response buffer
+        # after sending buffer's message, init response buffer
         server_response_buffer = ''
 
         # recv from client the guess number And parse it to int
@@ -96,12 +97,15 @@ def guess_number_game(sc):
 
         # compare the guess num and the random num
         if guess == x:
+            # send to client win comment And end the connection
             send_to_client(sc, win_comment)
             print('The Client win the Game. End the connection')
             return
         elif guess < x:
+            # save down comment to response buffer
             server_response_buffer += down_comment
         elif guess > x:
+            # save up comment to response buffer
             server_response_buffer += up_comment
 
         # check attempt count
@@ -118,10 +122,9 @@ def guess_number_game(sc):
 def make_ssl_socket(sc, certfile, cafile):
     try:
         # make context
-        purpose = ssl.Purpose.SERVER_AUTH
-        # specify the purpose and protocol
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=cafile)
-        context.purpose = purpose
+        # specify the purpose and protocol
+        context.purpose = ssl.Purpose.SERVER_AUTH
         context.check_hostname = False
         context.load_cert_chain(certfile=certfile)  # use PEM file
 
@@ -182,6 +185,7 @@ def accept_socket(s):
 
 def dump_json(data):
     try:
+        # serialize data to json
         serialized_data = json.dumps(data).encode('utf-8')
     except TypeError as e:
         print("Type Error:", e)
@@ -194,6 +198,7 @@ def dump_json(data):
 
 def load_json(data):
     try:
+        # deserialize json data
         deserialized_data = json.loads(data.decode('utf-8'))
     except TypeError as e:
         print("Type Error:", e)
@@ -205,6 +210,7 @@ def load_json(data):
 
 
 def invalid_input_error():
+    # save invalid input error comment to response buffer
     global server_response_buffer
     print(invalid_input_error_comment)
     server_response_buffer += invalid_input_error_comment
@@ -212,8 +218,9 @@ def invalid_input_error():
 
 def print_history(history_list):
     for history in history_list:
-        # decompress history string data
+        # decompress history data
         decompressed_history = zlib.decompress(history).decode('utf-8')
+        # print history data in Server's console
         print("-----------------")
         print(decompressed_history)
         print("-----------------")
@@ -221,6 +228,7 @@ def print_history(history_list):
 
 def load_history():
     try:
+        # load history list
         with open('h.pickle', 'rb') as f:
             return pickle.load(f)
     except FileNotFoundError:
@@ -251,25 +259,31 @@ def save_history():
 
 
 def close_socket(s, sc):
+    # save messages exchanged in the game
     save_history()
     print("Connection Closed")
+    # close sockets
     sc.close()
     s.close()
 
 
 def end_connection(s, sc):
+    # send end comment to client
     send_to_client(sc, end_comment)
     print(end_comment)
+    # close socket connection
     close_socket(s, sc)
     exit(0)
 
 
 def save_history_data(data):
+    # save history data using history_data string
     global history_data
     history_data += data
 
 
 def send_to_client(sc, data):
+    # send data to client and save data
     sc.sendall(dump_json(data))
     save_history_data(data)
 

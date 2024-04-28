@@ -94,13 +94,16 @@ def connect_socket(s):
 
 
 def send_request(s):
+    # accept the input for request and guess num
     deserialized_request = input()
+    # send the serialized request message to server
     request = dump_json(deserialized_request)
     s.sendall(request)
 
 
 def dump_json(data):
     try:
+        # serialize the data
         serialized_data = json.dumps(data).encode('utf-8')
     except TypeError as e:
         print("Type Error:", e)
@@ -113,6 +116,7 @@ def dump_json(data):
 
 def load_json(data):
     try:
+        # deserialize the data
         deserialized_data = json.loads(data.decode('utf-8'))
     except TypeError as e:
         print("Type Error:", e)
@@ -124,6 +128,7 @@ def load_json(data):
 
 
 def close_socket(s):
+    # close the socket
     print("Connection Closed")
     s.close()
 
