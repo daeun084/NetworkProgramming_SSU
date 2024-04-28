@@ -1,6 +1,8 @@
 import random
 import socket
 import json
+import ssl
+import argparse
 
 # comment for client
 win_comment = 'Congratulations, you did it.\n'
@@ -16,7 +18,7 @@ server_response_buffer = ''
 MAX_BYTES = 1024 * 1024
 
 
-def server():
+def server(cafile, certfile):
     # make socket
     s = make_socket()
 
@@ -29,12 +31,15 @@ def server():
     # accept client socket
     sc = accept_socket(s)
 
+    # make socket with ssl
+    sc = make_ssl_socket(sc, certfile, cafile)
+
     # inform client about game and recv 'start'
     serialized_start_comment = dump_json(start_comment)
     sc.sendall(serialized_start_comment)
 
     try:
-        deserialized_start_request, addr = sc.recvfrom(MAX_BYTES)
+        deserialized_start_request = sc.recv(MAX_BYTES)
         start_request = load_json(deserialized_start_request)
 
         if start_request == 'start':
@@ -104,6 +109,19 @@ def guess_number_game(sc):
     else:
         sc.sendall(dump_json(server_response_buffer + attempt_comment))
     print(attempt_comment)
+
+
+def make_ssl_socket(sc, certfile, cafile):
+    # make context
+    purpose = ssl.Purpose.SERVER_AUTH
+    # specify the purpose and protocol
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=cafile)
+    context.purpose = purpose
+    context.check_hostname = False
+    context.load_cert_chain(certfile=certfile) # use PEM file
+
+    # return server's wrapped socket
+    return context.wrap_socket(sc, server_side=True)
 
 
 def make_socket():
@@ -190,4 +208,10 @@ def end_connection(s, sc):
 
 
 if __name__ == '__main__':
-    server()
+    # set argument for pem file
+    parser = argparse.ArgumentParser(description='Server for Number Guess Game')
+    parser.add_argument('-a', metavar='cafile', default=None)
+    parser.add_argument('-s', metavar='certfile', default=None)
+    args = parser.parse_args()
+
+    server(args.a, args.s)

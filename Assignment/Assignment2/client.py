@@ -1,5 +1,7 @@
 import socket
 import json
+import ssl
+import argparse
 
 win_comment = 'Congratulations, you did it.\n'
 end_comment = "User don't start Game! End the Connection\n"
@@ -8,7 +10,7 @@ attempt_comment = "Sorry, you've used all your attempts!\n"
 MAX_BYTES = 1024 * 1024
 
 
-def client():
+def client(cafile):
     # make socket
     s = make_socket()
 
@@ -17,6 +19,9 @@ def client():
 
     # connect socket
     connect_socket(s)
+
+    # make socket with ssl
+    s = make_ssl_socket(s, cafile)
 
     # get response
     while True:
@@ -45,6 +50,15 @@ def client():
 
     # close socket connection
     close_socket(s)
+
+
+def make_ssl_socket(s, cafile):
+    # make context
+    purpose = ssl.Purpose.CLIENT_AUTH
+    context = ssl.create_default_context(purpose, cafile=cafile)
+
+    # return client's wrapped socket
+    return context.wrap_socket(s, server_hostname='localhost')
 
 
 def make_socket():
@@ -114,4 +128,9 @@ def check_comment(response):
 
 
 if __name__ == '__main__':
-    client()
+    # set argument for pem file
+    parser = argparse.ArgumentParser(description='Client for Number Guess Game')
+    parser.add_argument('-a', metavar='cafile', default=None)
+    args = parser.parse_args()
+
+    client(args.a)
