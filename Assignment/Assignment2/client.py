@@ -10,7 +10,7 @@ attempt_comment = "Sorry, you've used all your attempts!\n"
 MAX_BYTES = 1024 * 1024
 
 
-def client(cafile):
+def client(cafile=None):
     # make socket
     s = make_socket()
 
@@ -55,11 +55,12 @@ def client(cafile):
 def make_ssl_socket(s, cafile):
     try:
         # make context
-        purpose = ssl.Purpose.CLIENT_AUTH
-        context = ssl.create_default_context(purpose, cafile=cafile)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.purpose = ssl.Purpose.SERVER_AUTH
+        context.load_verify_locations(cafile)
 
         # return client's wrapped socket
-        return context.wrap_socket(s, server_hostname='localhost')
+        return context.wrap_socket(s, server_hostname='daeun kim')
     except ssl.SSLCertVerificationError as e:
         print("SSL Cert Verification Error:", e)
         exit(0)
@@ -148,7 +149,8 @@ def check_comment(response):
 if __name__ == '__main__':
     # set argument for pem file
     parser = argparse.ArgumentParser(description='Client for Number Guess Game')
-    parser.add_argument('-a', metavar='cafile', default=None)
+    parser.add_argument('-a', metavar='cafile', default=None,
+                        help='path to CA PEM file')
     args = parser.parse_args()
 
     client(args.a)

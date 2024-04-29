@@ -16,7 +16,7 @@ history_data = ''
 MAX_BYTES = 1024 * 1024
 
 
-def server(cafile, certfile):
+def server(certfile, cafile=None):
     # make socket
     s = make_socket()
 
@@ -122,11 +122,10 @@ def guess_number_game(sc):
 def make_ssl_socket(sc, certfile, cafile):
     try:
         # make context
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER, cafile=cafile)
-        # specify the purpose and protocol
-        context.purpose = ssl.Purpose.SERVER_AUTH
-        context.check_hostname = False
-        context.load_cert_chain(certfile=certfile)  # use PEM file
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.purpose = ssl.Purpose.CLIENT_AUTH
+        context.load_cert_chain(certfile=cafile, keyfile=certfile)
+        context.load_verify_locations(cafile=cafile)
 
         # return server's wrapped socket
         return context.wrap_socket(sc, server_side=True)
@@ -291,8 +290,10 @@ def send_to_client(sc, data):
 if __name__ == '__main__':
     # set argument for pem file
     parser = argparse.ArgumentParser(description='Server for Number Guess Game')
-    parser.add_argument('-a', metavar='cafile', default=None)
-    parser.add_argument('-s', metavar='certfile', default=None)
+    parser.add_argument('-a', metavar='cafile', default=None,
+                        help='path to CA PEM file')
+    parser.add_argument('-s', metavar='certfile', default=None,
+                        help='path to server PEM file')
     args = parser.parse_args()
 
-    server(args.a, args.s)
+    server(args.s, args.a)
