@@ -231,8 +231,9 @@ def load_history():
         with open('h.pickle', 'rb') as f:
             return pickle.load(f)
     except FileNotFoundError:
-        print("File Not Found Error: h.pickle")
-        exit(0)
+        # if there is no history file, init history
+        init_history()
+        return []
     except Exception as e:
         print("Error:", e)
         exit(0)
@@ -250,8 +251,17 @@ def save_history():
             # save history list
             pickle.dump(loaded_history_list, f)
     except FileNotFoundError:
-        print("File Not Found Error: h.pickle")
+        # if there is no history file, init history
+        init_history()
+    except Exception as e:
+        print("Error:", e)
         exit(0)
+
+
+def init_history():
+    try:
+        with open('h.pickle', 'wb') as f:
+            pickle.dump([], f)
     except Exception as e:
         print("Error:", e)
         exit(0)
