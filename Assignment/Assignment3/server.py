@@ -1,68 +1,62 @@
-import random, socket, json, ssl, argparse, zlib, pickle, memcache, logging
+import random, socket, json, ssl, argparse, logging
+from threading import Thread
 
 
 # comment for client
 win_comment = 'Congratulations, you did it.\n'
 up_comment = 'Hint: You Guessed too high!\n'
 down_comment = 'Hint: You guessed too small!\n'
-start_comment = 'Guess the Number! Would you start the game?: '
-end_comment = "User don't start Game! End the Connection\n"
+start_comment = 'Guess the Number! Choose the GAME MODE\n - SingleMode : 1\n - MultiMode : 2\n - Terminate : exit\n'
+end_comment = "User want to exit Game! End the Connection\n"
 attempt_comment = "Sorry, you've used all your attempts!\n"
 guess_comment = '[Guess the number]: '
+inform_comment = 'You can attempt to guess the random number (1~10) in 5 chance. if you stop the game, send me "exit".\n[Guess the number]:  '
 invalid_input_error_comment = 'Invalid Guess Num. Try again\n'
+server_start_buffer = ''
 server_response_buffer = ''
-history_data = ''
 
 MAX_BYTES = 1024 * 1024
 logger = logging.getLogger('server')
+console = logging.StreamHandler()
+logger.addHandler(console)
 
 
-def server(certfile, cafile=None):
-    # make socket
-    s = make_socket()
+def server(sc):
+    while True:
+        global server_start_buffer
 
-    # bind socket
-    bind_socket(s)
+        # inform client about choosing game mode
+        send_to_client(sc, server_start_buffer + start_comment)
+        server_start_buffer = ''
 
-    # listen socket
-    listen_socket(s)
+        try:
+            deserialized_start_request = sc.recv(MAX_BYTES)
+            start_request = load_json(deserialized_start_request)
 
-    # accept client socket
-    sc = accept_socket(s)
-
-    # make socket with ssl
-    sc = make_ssl_socket(sc, certfile, cafile)
-
-    # inform client about game and recv 'start'
-    send_to_client(sc, start_comment)
-
-    try:
-        deserialized_start_request = sc.recv(MAX_BYTES)
-        start_request = load_json(deserialized_start_request)
-        save_history_data(start_request + '\n')
-
-        if start_request == 'start':
-            # print history data
-            print("-----HISTORY START-----")
-            loaded_history_list = load_history()
-            print_history(loaded_history_list)
-            print("-----HISTORY END-----")
-
-            # if client input start, start the number game
-            guess_number_game(sc)
-        else:
-            # if client doesn't input start, end the connection
-            end_connection(s, sc)
-    except socket.error as e:
-        logger.error("Socket Error while receiving message: %s", e)
+            if start_request == 'exit':
+                # exit game
+                break
+            elif start_request == '1':
+                # start single mode
+                guess_number_game_single_mode(sc)
+            elif start_request == '2':
+                # start multiple mode
+                guess_number_game_multi_mode(sc)
+            else:
+                # if client doesn't choose game mode, end the connection
+                logger.info("Invalid Client's Response")
+                end_connection(sc)
+        except socket.error as e:
+            logger.error("Socket Error while receiving message: %s", e)
 
     # close socket connection
-    close_socket(s, sc)
+    end_connection(sc)
 
 
-def guess_number_game(sc):
+def guess_number_game_single_mode(sc):
+    global server_start_buffer
     global server_response_buffer
-    logger.info("Start the Number Guess Game")
+    logger.info("Start the Number Guess Game in Single Mode")
 
     # count for client's attempt
     count = 0
@@ -74,7 +68,10 @@ def guess_number_game(sc):
     while count < 5:
         # send client for guess the number question
         # use response buffer for send multiple comments
-        send_to_client(sc, server_response_buffer + guess_comment)
+        if count == 0:
+            send_to_client(sc, inform_comment)
+        else:
+            send_to_client(sc, server_response_buffer + guess_comment)
 
         # after sending buffer's message, init response buffer
         server_response_buffer = ''
@@ -82,8 +79,11 @@ def guess_number_game(sc):
         # recv from client the guess number And parse it to int
         try:
             response = sc.recv(MAX_BYTES)
-            guess = int(load_json(response))
-            save_history_data(response.decode('utf-8') + '\n')
+            response = load_json(response)
+            if response == 'exit':
+                # return to server()
+                return
+            guess = int(response)
         except ValueError as e:
             invalid_input_error()
             continue
@@ -99,8 +99,8 @@ def guess_number_game(sc):
         # compare the guess num and the random num
         if guess == x:
             # send to client win comment And end the connection
-            send_to_client(sc, win_comment)
-            logger.info('The Client win the Game. End the connection')
+            server_start_buffer += win_comment
+            logger.info('The Client win the Game.')
             return
         elif guess < x:
             # save down comment to response buffer
@@ -113,11 +113,24 @@ def guess_number_game(sc):
         count += 1
 
     # if client's attempt is over
-    if server_response_buffer == '':
-        send_to_client(sc, attempt_comment)
-    else:
-        send_to_client(sc, server_response_buffer + attempt_comment)
+    server_start_buffer += server_response_buffer + attempt_comment
     logger.info(attempt_comment)
+
+
+def guess_number_game_multi_mode(sc):
+    logger.info("Start the Number Guess Game in Multi Mode")
+
+
+def create_srv_socket():
+    # make socket
+    s = make_socket()
+
+    # bind socket
+    bind_socket(s)
+
+    # listen socket
+    listen_socket(s)
+    return s
 
 
 def make_ssl_socket(sc, certfile, cafile):
@@ -215,96 +228,54 @@ def invalid_input_error():
     logger.info(invalid_input_error_comment)
     server_response_buffer += invalid_input_error_comment
 
-
-def print_history(history_list):
-    for history in history_list:
-        # decompress history data
-        decompressed_history = zlib.decompress(history).decode('utf-8')
-        # print history data in Server's console
-        print("-----------------")
-        print(decompressed_history)
-        print("-----------------")
-
-
-def load_history():
-    try:
-        # load history list
-        with open('h.pickle', 'rb') as f:
-            return pickle.load(f)
-    except FileNotFoundError:
-        # if there is no history file, init history
-        init_history()
-        return []
-    except Exception as e:
-        logger.error("Error : %s", e)
-        exit(0)
-
-
-def save_history():
-    # load history list
-    loaded_history_list = load_history()
-    try:
-        with open('h.pickle', 'wb') as f:
-            # compress history string data
-            compressed_history = zlib.compress(history_data.encode('utf-8'))
-            # add recent log history
-            loaded_history_list.append(compressed_history)
-            # save history list
-            pickle.dump(loaded_history_list, f)
-    except FileNotFoundError:
-        # if there is no history file, init history
-        init_history()
-    except Exception as e:
-        logger.error("Error : %s", e)
-        exit(0)
-
-
-def init_history():
-    try:
-        with open('h.pickle', 'wb') as f:
-            pickle.dump([], f)
-    except Exception as e:
-        logger.error("Error : %s", e)
-        exit(0)
-
-
-def close_socket(s, sc):
-    # save messages exchanged in the game
-    save_history()
-    logger.info("Connection closed")
-    # close sockets
-    sc.close()
-    s.close()
-
-
-def end_connection(s, sc):
+def end_connection(sc):
     # send end comment to client
     send_to_client(sc, end_comment)
     logger.info(end_comment)
-    # close socket connection
-    close_socket(s, sc)
+
+    # save messages exchanged in the game
+    logger.info("Connection closed")
+    # close sockets
+    # sc.shutdown(socket.SHUT_RDWR)
+    sc.close()
     exit(0)
-
-
-def save_history_data(data):
-    # save history data using history_data string
-    global history_data
-    history_data += data
 
 
 def send_to_client(sc, data):
     # send data to client and save data
     sc.sendall(dump_json(data))
-    save_history_data(data)
 
 
-if __name__ == '__main__':
+def accept_connection_forever(listener, certfile, cafile=None):
+    while True:
+        # accept client socket
+        sc = accept_socket(listener)
+
+        # make socket with ssl
+        sc = make_ssl_socket(sc, certfile, cafile)
+
+        server(sc)
+
+
+def start_threads(listener, certfile, cafile=None):
+    # handle 50 client
+    for i in range(50):
+        th = Thread(target=accept_connection_forever, args=(listener, certfile, cafile))
+        th.start()
+
+
+def parse_command():
     # set argument for pem file
     parser = argparse.ArgumentParser(description='Server for Number Guess Game')
     parser.add_argument('-a', metavar='cafile', default=None,
                         help='path to CA PEM file')
     parser.add_argument('-s', metavar='certfile', default=None,
                         help='path to server PEM file')
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    server(args.s, args.a)
+
+if __name__ == '__main__':
+    args = parse_command()
+    listener = create_srv_socket()
+    start_threads(listener, args.s, args.a)
+

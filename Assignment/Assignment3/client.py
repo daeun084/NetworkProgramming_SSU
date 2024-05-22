@@ -5,7 +5,7 @@ import argparse
 import logging
 
 win_comment = 'Congratulations, you did it.\n'
-end_comment = "User don't start Game! End the Connection\n"
+end_comment = "User want to exit Game! End the Connection\n"
 attempt_comment = "Sorry, you've used all your attempts!\n"
 
 MAX_BYTES = 1024 * 1024
@@ -133,16 +133,13 @@ def load_json(data):
 def close_socket(s):
     # close the socket
     logger.info("Closing socket")
+    # s.shutdown(socket.SHUT_RDWR)
     s.close()
 
 
 def check_comment(response):
-    # case for client success to guess num and win
-    # or case for client don't start the game
-    # or case for attempt for game is over
-    if (response.__eq__(win_comment)
-            or response.__eq__(end_comment)
-            or attempt_comment in response):
+    # case for client don't start the game
+    if response.__eq__(end_comment):
         return True
     else:
         return False
