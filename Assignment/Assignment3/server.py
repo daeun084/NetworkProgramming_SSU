@@ -1,4 +1,5 @@
-import random, socket, json, ssl, argparse, logging
+import random, socket, json, ssl, argparse, logging, zmq
+import time
 from threading import Thread
 
 
@@ -16,9 +17,21 @@ server_start_buffer = ''
 server_response_buffer = ''
 
 MAX_BYTES = 1024 * 1024
+
+# set logger
 logger = logging.getLogger('server')
+logger.setLevel(logging.DEBUG)
 console = logging.StreamHandler()
 logger.addHandler(console)
+
+# make publisher
+zcontext = zmq.Context()
+zsock = zcontext.socket(zmq.PUB)
+zsock.bind("tcp://127.0.0.1:8081")
+
+# make router
+rsock = zcontext.socket(zmq.ROUTER)
+rsock.bind("tcp://127.0.0.1:8082")
 
 
 def server(sc):
@@ -119,6 +132,20 @@ def guess_number_game_single_mode(sc):
 
 def guess_number_game_multi_mode(sc):
     logger.info("Start the Number Guess Game in Multi Mode")
+    global zsock
+    global rsock
+
+    # get identity of client
+    identity, request = rsock.recv_multipart()
+
+    zsock.send(dump_json("PUB:TEST"))
+
+    for i in range(2):
+        print(i)
+        rsock.send_multipart([identity, dump_json(inform_comment)])
+
+    rsock.send_multipart([identity, dump_json("bye")])
+
 
 
 def create_srv_socket():
@@ -244,6 +271,10 @@ def end_connection(sc):
 def send_to_client(sc, data):
     # send data to client and save data
     sc.sendall(dump_json(data))
+
+
+def send_to_zmq_client(sc, data):
+    sc.send(dump_json(data))
 
 
 def accept_connection_forever(listener, certfile, cafile=None):

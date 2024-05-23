@@ -1,23 +1,29 @@
-import socket
-import json
-import ssl
-import argparse
-import logging
+import asyncio
+import socket, json, ssl, argparse, logging, zmq
+import time, zmq.asyncio
 
 win_comment = 'Congratulations, you did it.\n'
 end_comment = "User want to exit Game! End the Connection\n"
 attempt_comment = "Sorry, you've used all your attempts!\n"
+start_comment = "Choose the GAME MODE"
 
 MAX_BYTES = 1024 * 1024
+
+# set logger
 logger = logging.getLogger('client')
+logger.setLevel(logging.DEBUG)
+console = logging.StreamHandler()
+logger.addHandler(console)
+
+multi_flag = 0
 
 
 def client(cafile=None):
     # make socket
     s = make_socket()
 
-    # set timeout to udp socket
-    s.settimeout(5)
+    # set timeout to socket
+    s.settimeout(30)
 
     # connect socket
     connect_socket(s)
@@ -97,11 +103,84 @@ def connect_socket(s):
 
 
 def send_request(s):
+    global multi_flag
+
     # accept the input for request and guess num
     deserialized_request = input()
-    # send the serialized request message to server
     request = dump_json(deserialized_request)
+
+    # send the serialized request message to server
     s.sendall(request)
+    if deserialized_request.strip().__eq__("2") and multi_flag == 1:
+        asyncio.run(multi_mode())
+    multi_flag = 0
+
+
+async def receive_server_message(ssock):
+    print(time.time())
+    print("start ssock")
+    while True:
+        try:
+            response = await ssock.recv()
+            response = load_json(response)
+            logger.info("Subscriber's Message : {}".format(response))
+        except Exception as e:
+            logger.error("Exception : %s", e)
+            break
+
+
+async def communicate_with_server(rsock):
+    print(time.time())
+    print("start rsock")
+    # send data to server for giving client's identity
+    await rsock.send(dump_json("Enter the Multiple Game"))
+    print('send data to server')
+
+    while True:
+        try:
+            # recv message from dealer
+            print('recving data from server')
+
+            response = await rsock.recv()
+            response = load_json(response)
+            print(f"Received response from Server: {response}")
+
+            await asyncio.sleep(3)
+
+            # 'bye' 메시지를 받으면 종료
+            if response == "bye":
+                break
+        except ConnectionResetError as e:
+            logger.error("Connection Reset : %s", e)
+            break
+
+    print("end communication")
+    print(time.time())
+
+    return
+
+
+async def multi_mode():
+    logger.info("Start the Number Guess in Multi Mode")
+
+    # make subscriber
+    ssock = zmq.asyncio.Context().socket(zmq.SUB)
+    ssock.setsockopt(zmq.SUBSCRIBE, b"")
+    ssock.connect('tcp://127.0.0.1:8081')
+
+    # make dealer
+    rsock = zmq.asyncio.Context().socket(zmq.DEALER)
+    rsock.connect('tcp://127.0.0.1:8082')
+
+    # run codes
+    task1 = asyncio.create_task(communicate_with_server(rsock))
+    task2 = asyncio.create_task(receive_server_message(ssock))
+    await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
+
+    # end multi mode close sockets
+    ssock.close()
+    rsock.close()
+    logger.info("Close Game in Multi Mode")
 
 
 def dump_json(data):
@@ -141,6 +220,9 @@ def check_comment(response):
     # case for client don't start the game
     if response.__eq__(end_comment):
         return True
+    if start_comment in response:
+        global multi_flag
+        multi_flag = 1
     else:
         return False
 
