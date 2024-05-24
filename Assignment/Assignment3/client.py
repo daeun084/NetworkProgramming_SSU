@@ -1,6 +1,6 @@
 import asyncio
 import socket, json, ssl, argparse, logging, zmq
-import time, zmq.asyncio
+import zmq.asyncio
 
 win_comment = 'Congratulations, you did it.\n'
 end_comment = "User want to exit Game! End the Connection\n"
@@ -17,19 +17,21 @@ logger.addHandler(console)
 
 multi_flag = 0
 
+SSL_CAFILE = None
 
-def client(cafile=None):
+
+def client():
     # make socket
     s = make_socket()
 
     # set timeout to socket
-    s.settimeout(30)
+    s.settimeout(60)
 
     # connect socket
     connect_socket(s)
 
     # make socket with ssl
-    s = make_ssl_socket(s, cafile)
+    s = make_ssl_socket(s)
 
     # get response
     while True:
@@ -60,12 +62,13 @@ def client(cafile=None):
     close_socket(s)
 
 
-def make_ssl_socket(s, cafile):
+def make_ssl_socket(s):
+    global SSL_CAFILE
     try:
         # make context
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.purpose = ssl.Purpose.SERVER_AUTH
-        context.load_verify_locations(cafile)
+        context.load_verify_locations(SSL_CAFILE)
 
         # return client's wrapped socket
         return context.wrap_socket(s, server_hostname='daeun kim')
@@ -117,47 +120,47 @@ def send_request(s):
 
 
 async def receive_server_message(ssock):
-    print(time.time())
-    print("start ssock")
+    # monitoring PUB's MESSAGE
     while True:
         try:
             response = await ssock.recv()
             response = load_json(response)
-            logger.info("Subscriber's Message : {}".format(response))
+            logger.info("[* PUB] %s", response)
+
+            if ('The Stage Is Reset.' in response or
+                'Congratulations,' in response or
+                    'Sorry,' in response):
+                # the game is reset
+                logger.info("[* PUB] The GAME is RESET")
+
         except Exception as e:
             logger.error("Exception : %s", e)
             break
 
 
 async def communicate_with_server(rsock):
-    print(time.time())
-    print("start rsock")
     # send data to server for giving client's identity
     await rsock.send(dump_json("Enter the Multiple Game"))
-    print('send data to server')
 
     while True:
+        # communication with server using DEALER-ROUTER
         try:
-            # recv message from dealer
-            print('recving data from server')
-
+            # recv message from server
             response = await rsock.recv()
             response = load_json(response)
-            print(f"Received response from Server: {response}")
+            logger.info(response)
 
-            await asyncio.sleep(3)
+            # 'exit' 메시지를 받으면 종료
+            if response == "exit":
+                return
 
-            # 'bye' 메시지를 받으면 종료
-            if response == "bye":
-                break
+            # send message to server
+            await rsock.send(dump_json(input()))
+
         except ConnectionResetError as e:
             logger.error("Connection Reset : %s", e)
             break
 
-    print("end communication")
-    print(time.time())
-
-    return
 
 
 async def multi_mode():
@@ -167,14 +170,17 @@ async def multi_mode():
     ssock = zmq.asyncio.Context().socket(zmq.SUB)
     ssock.setsockopt(zmq.SUBSCRIBE, b"")
     ssock.connect('tcp://127.0.0.1:8081')
+    # ssock = make_ssl_socket(ssock)
 
     # make dealer
     rsock = zmq.asyncio.Context().socket(zmq.DEALER)
     rsock.connect('tcp://127.0.0.1:8082')
+    # rsock = make_ssl_socket(rsock)
 
     # run codes
     task1 = asyncio.create_task(communicate_with_server(rsock))
     task2 = asyncio.create_task(receive_server_message(ssock))
+    # if task1 or task2 end, terminate the other method
     await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
 
     # end multi mode close sockets
@@ -212,7 +218,7 @@ def load_json(data):
 def close_socket(s):
     # close the socket
     logger.info("Closing socket")
-    # s.shutdown(socket.SHUT_RDWR)
+    s.shutdown(socket.SHUT_WR)
     s.close()
 
 
@@ -227,11 +233,20 @@ def check_comment(response):
         return False
 
 
-if __name__ == '__main__':
+def set_ssl_certificate(args):
+    global SSL_CAFILE
+    SSL_CAFILE = args.a
+
+
+def parse_command():
     # set argument for pem file
     parser = argparse.ArgumentParser(description='Client for Number Guess Game')
     parser.add_argument('-a', metavar='cafile', default=None,
                         help='path to CA PEM file')
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    client(args.a)
+
+if __name__ == '__main__':
+    args = parse_command()
+    set_ssl_certificate(args)
+    client()

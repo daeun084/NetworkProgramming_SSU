@@ -1,6 +1,8 @@
-import random, socket, json, ssl, argparse, logging, zmq
-import time
+import asyncio
+import random, socket, json, ssl, argparse, logging, zmq, zmq.asyncio
 from threading import Thread
+# from server import ZMQTLSServer
+# from client import ZMQTLSClient
 
 
 # comment for client
@@ -11,7 +13,7 @@ start_comment = 'Guess the Number! Choose the GAME MODE\n - SingleMode : 1\n - M
 end_comment = "User want to exit Game! End the Connection\n"
 attempt_comment = "Sorry, you've used all your attempts!\n"
 guess_comment = '[Guess the number]: '
-inform_comment = 'You can attempt to guess the random number (1~10) in 5 chance. if you stop the game, send me "exit".\n[Guess the number]:  '
+inform_comment = '-------\nYou can attempt to guess the random number (1~10) in 5 chance. If you stop the game, send me "exit".\n-------\n[Guess the number]:  '
 invalid_input_error_comment = 'Invalid Guess Num. Try again\n'
 server_start_buffer = ''
 server_response_buffer = ''
@@ -25,13 +27,20 @@ console = logging.StreamHandler()
 logger.addHandler(console)
 
 # make publisher
-zcontext = zmq.Context()
+zcontext = zmq.asyncio.Context()
 zsock = zcontext.socket(zmq.PUB)
 zsock.bind("tcp://127.0.0.1:8081")
 
 # make router
 rsock = zcontext.socket(zmq.ROUTER)
 rsock.bind("tcp://127.0.0.1:8082")
+
+# random number
+x = -1
+
+# ssl
+SSL_CERT = None
+SSL_CAFILE = None
 
 
 def server(sc):
@@ -54,7 +63,7 @@ def server(sc):
                 guess_number_game_single_mode(sc)
             elif start_request == '2':
                 # start multiple mode
-                guess_number_game_multi_mode(sc)
+                asyncio.run(guess_number_game_multi_mode(sc))
             else:
                 # if client doesn't choose game mode, end the connection
                 logger.info("Invalid Client's Response")
@@ -130,22 +139,96 @@ def guess_number_game_single_mode(sc):
     logger.info(attempt_comment)
 
 
-def guess_number_game_multi_mode(sc):
+async def guess_number_game_multi_mode(sc):
     logger.info("Start the Number Guess Game in Multi Mode")
     global zsock
     global rsock
+    global x
+    buff = ''
+
+    # wrap sockets
+    # zsock = make_ssl_socket(zsock)
+    # rsock = make_ssl_socket(rsock)
+
+    # init random number
+    x = init_random_num()
 
     # get identity of client
-    identity, request = rsock.recv_multipart()
+    identity, request = await rsock.recv_multipart()
+    # send client inform comment
+    await rsock.send_multipart([identity, dump_json(inform_comment)])
 
-    zsock.send(dump_json("PUB:TEST"))
+    while True:
+        count = 0
 
-    for i in range(2):
-        print(i)
-        rsock.send_multipart([identity, dump_json(inform_comment)])
+        # client attempt 5 under
+        while count < 5:
+            # send client for guess the number question
+            # use response buffer for send multiple comments
 
-    rsock.send_multipart([identity, dump_json("bye")])
+            # recv from client the guess number And parse it to int
+            try:
+                i, response = await rsock.recv_multipart()
+                response = load_json(response)
+                if response == 'exit':
+                    # return to server()
+                    await rsock.send_multipart([identity, dump_json('exit')])
+                    return
+                guess = int(response)
+            except ValueError as e:
+                logger.error('Invalid response')
+                await rsock.send_multipart([identity, dump_json(inform_comment + guess_comment)])
 
+                continue
+
+            # log guess number from client
+            logger.info("[* MultiMode] [Client's Guess Number]: %s", guess)
+
+            # compare the guess num and the random num
+            if guess == x:
+                # send to client win comment
+                await zsock.send(dump_json(win_comment))
+                logger.info('The Client win the Game.')
+                break
+            elif guess < x:
+                # save down comment to response buffer
+                buff += down_comment
+            elif guess > x:
+                # save up comment to response buffer
+                buff += up_comment
+
+            # check attempt count
+            count += 1
+            # send guess message
+            await rsock.send_multipart([identity, dump_json(buff + guess_comment)])
+            buff = ''
+
+        await zsock.send([identity, dump_json(attempt_comment)])
+
+        # set new game stage
+        asyncio.run(init_multi_game_stage())
+
+
+
+
+    # # print(zsock.monitor('inproc://127.0.0.1', zmq.EVENT_ALL))
+    #
+    # await zsock.send(dump_json("RANDOMNUM : {}".format(init_random_num())))
+    #
+    # for i in range(2):
+    #     print(i)
+    #     await rsock.send_multipart([identity, dump_json(inform_comment)])
+    #
+    # await rsock.send_multipart([identity, dump_json("bye")])
+
+def init_random_num():
+    return random.randint(1, 10)
+
+
+async def init_multi_game_stage():
+    global x
+    x = init_random_num()
+    await zsock.send(dump_json('[* MultiMode] The Stage Is Reset. Your Attemps for game are also reset.\nRestart the Game!\n[Guess the number]:  '))
 
 
 def create_srv_socket():
@@ -160,13 +243,16 @@ def create_srv_socket():
     return s
 
 
-def make_ssl_socket(sc, certfile, cafile):
+def make_ssl_socket(sc):
+    global SSL_CERT
+    global SSL_CAFILE
+
     try:
         # make context
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.purpose = ssl.Purpose.CLIENT_AUTH
-        context.load_cert_chain(certfile=cafile, keyfile=certfile)
-        context.load_verify_locations(cafile=cafile)
+        context.load_cert_chain(certfile=SSL_CAFILE, keyfile=SSL_CERT)
+        context.load_verify_locations(cafile=SSL_CAFILE)
 
         # return server's wrapped socket
         return context.wrap_socket(sc, server_side=True)
@@ -255,6 +341,7 @@ def invalid_input_error():
     logger.info(invalid_input_error_comment)
     server_response_buffer += invalid_input_error_comment
 
+
 def end_connection(sc):
     # send end comment to client
     send_to_client(sc, end_comment)
@@ -263,7 +350,7 @@ def end_connection(sc):
     # save messages exchanged in the game
     logger.info("Connection closed")
     # close sockets
-    # sc.shutdown(socket.SHUT_RDWR)
+    sc.shutdown(socket.SHUT_RDWR)
     sc.close()
     exit(0)
 
@@ -277,22 +364,29 @@ def send_to_zmq_client(sc, data):
     sc.send(dump_json(data))
 
 
-def accept_connection_forever(listener, certfile, cafile=None):
+def accept_connection_forever(listener):
     while True:
         # accept client socket
         sc = accept_socket(listener)
 
         # make socket with ssl
-        sc = make_ssl_socket(sc, certfile, cafile)
+        sc = make_ssl_socket(sc)
 
         server(sc)
 
 
-def start_threads(listener, certfile, cafile=None):
+def start_threads(listener):
     # handle 50 client
     for i in range(50):
-        th = Thread(target=accept_connection_forever, args=(listener, certfile, cafile))
+        th = Thread(target=accept_connection_forever, args=(listener, ))
         th.start()
+
+
+def set_ssl_certificate(args):
+    global SSL_CERT
+    global SSL_CAFILE
+    SSL_CERT = args.s
+    SSL_CAFILE = args.a
 
 
 def parse_command():
@@ -307,6 +401,7 @@ def parse_command():
 
 if __name__ == '__main__':
     args = parse_command()
+    set_ssl_certificate(args)
     listener = create_srv_socket()
-    start_threads(listener, args.s, args.a)
+    start_threads(listener)
 
