@@ -49,7 +49,7 @@ def client():
             break
 
         # print the response message to client
-        print(response)
+        logger.info("%s", response)
 
         # check the response message
         if check_comment(response):
@@ -127,12 +127,6 @@ async def receive_server_message(ssock):
             response = load_json(response)
             logger.info("[* PUB] %s", response)
 
-            if ('The Stage Is Reset.' in response or
-                'Congratulations,' in response or
-                    'Sorry,' in response):
-                # the game is reset
-                logger.info("[* PUB] The GAME is RESET")
-
         except Exception as e:
             logger.error("Exception : %s", e)
             break
@@ -146,6 +140,7 @@ async def communicate_with_server(rsock):
         # communication with server using DEALER-ROUTER
         try:
             # recv message from server
+            await asyncio.sleep(0.01)
             response = await rsock.recv()
             response = load_json(response)
             logger.info(response)
@@ -154,13 +149,16 @@ async def communicate_with_server(rsock):
             if response == "exit":
                 return
 
+            await asyncio.sleep(0.01)
+
             # send message to server
-            await rsock.send(dump_json(input()))
+            request = dump_json(input())
+            await rsock.send(request)
+            await asyncio.sleep(0.01)
 
         except ConnectionResetError as e:
             logger.error("Connection Reset : %s", e)
             break
-
 
 
 async def multi_mode():
