@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Number Guessing Game</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+         .score {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .rules {
+            font-size: 1.2em;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            color: darkgrey;
+        }
+        .guess {
+            margin-top: 50px;
+            margin-bottom: 20px;
+        }
+        .guess input {
+            padding: 10px;
+            font-size: 1em;
+        }
+        .guess button {
+            padding: 10px;
+            font-size: 0.8em;
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        .response {
+            padding: 20px;
+            font-size: 1em;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            color: darkblue;
+        }
+        .logout {
+            padding: 10px;
+            font-size: 0.5em;
+            background-color: gray;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+<!--    <script>-->
+<!--        function guess(){-->
+<!--            // function for submit guessing number-->
+<!--            guess = document.getElementById('guess').value;-->
+<!--            csrf_token = document.getElementById('csrf_token').value;-->
+
+<!--            response = fetch('/guess', {-->
+<!--                method: 'POST',-->
+<!--                headers: {-->
+<!--                    'Content-Type': 'application/json'-->
+<!--                },-->
+<!--                body: JSON.stringify({'guess':guess, 'csrf_token':csrf_token})-->
+<!--                }-->
+<!--            );-->
+<!--            result = response.json();-->
+<!--            document.getElementById('response').innerText = result.message;-->
+<!--        }-->
+<!--    </script>-->
+</head>
+<body>
+    <div class="container">
+        {% block body %}
+
+            <!--score-->
+             <div class="score">
+                Score: {{ information }}
+            </div>
+
+            <!--game rules-->
+            <div class="rules">
+               [Game Rule] <br> You can attempt to guess the random number (1~10) in 5 chance. <br>
+                If you success to guess the number, or fail to guess in 5 chance, the game is RESET.<br>
+                GUESS THE NUMBER !!
+            </div>
+
+            <!--guess the number-->
+            <div class="guess">
+                <form method="post" action="/guess">
+                    <label>Guess the number : <input type="number" name="guess" id="guess" min="1" max="10"></label> <br>
+                    <!--put csrf_token with quess action-->
+                    <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit">Submit Guess</button>
+                </form>
+            </div>
+
+            <!--response from server-->
+            <div class="response" id="response">
+                {{ response }}
+            </div>
+
+            <!--logout-->
+            <form method="post" action="/logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="logout" type="submit">LOGOUT</button>
+            </form>
+
+        {% endblock %}
+    </div>
+</body>
+</html>
