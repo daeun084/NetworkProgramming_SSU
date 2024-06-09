@@ -66,24 +66,63 @@
             cursor: pointer;
         }
     </style>
-<!--    <script>-->
-<!--        function guess(){-->
-<!--            // function for submit guessing number-->
-<!--            guess = document.getElementById('guess').value;-->
-<!--            csrf_token = document.getElementById('csrf_token').value;-->
+    <script>
+         async function guess_number(event) {
+            event.preventDefault();
 
-<!--            response = fetch('/guess', {-->
-<!--                method: 'POST',-->
-<!--                headers: {-->
-<!--                    'Content-Type': 'application/json'-->
-<!--                },-->
-<!--                body: JSON.stringify({'guess':guess, 'csrf_token':csrf_token})-->
-<!--                }-->
-<!--            );-->
-<!--            result = response.json();-->
-<!--            document.getElementById('response').innerText = result.message;-->
-<!--        }-->
-<!--    </script>-->
+            // function for submit guessing number
+            const guess = document.getElementById('guess').value;
+            const csrf_token = document.getElementById('csrf_token').value;
+            try{
+                 const response = await fetch('/guess', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({'guess': guess, 'csrf_token': csrf_token})
+                });
+
+                // get response
+                const result = await response.json();
+                if (result.redirect) {
+                    window.location.href = result.redirect;
+                } else {
+                    // if response doesn't have redirect, show response's message
+                    document.getElementById('response').innerText = result.message;
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('response').innerText = 'An error occurred. Please try again.';
+            }
+        }
+
+        async function logout(event) {
+            event.preventDefault();
+            const csrf_token = document.getElementById('csrf_token').value;
+
+            try {
+                 const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({'csrf_token': csrf_token})
+                });
+
+                // get response
+                const result = await response.json();
+                if (result.redirect) {
+                    // redirect for login
+                    window.location.href = result.redirect;
+                }
+            }
+            catch (error) {
+                console.error('ERROR:', error);
+                document.getElementById('response').innerText = 'An error occurred. Please try again.';
+            }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -103,10 +142,10 @@
 
             <!--guess the number-->
             <div class="guess">
-                <form method="post" action="/guess">
-                    <label>Guess the number : <input type="number" name="guess" id="guess" min="1" max="10"></label> <br>
+                <form onsubmit="guess_number(event)">
+                    <label>Guess the number : <input id="guess" type="number" name="guess" min="1" max="10"></label> <br>
                     <!--put csrf_token with quess action-->
-                    <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token }}">
+                    <input id="csrf_token" type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit">Submit Guess</button>
                 </form>
             </div>
@@ -117,7 +156,7 @@
             </div>
 
             <!--logout-->
-            <form method="post" action="/logout">
+            <form onsubmit="logout(event)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button class="logout" type="submit">LOGOUT</button>
             </form>

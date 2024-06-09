@@ -3,15 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <title>Login</title>
+      <script>
+        async function login(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try{
+                const response = await fetch('/login', {
+                     method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({'username': username, 'password': password})
+                });
+
+                // get response
+                const result = await response.json();
+                if (response.ok && result.redirect) {
+                    // redirect
+                    window.location.href = result.redirect;
+                }
+            } catch (error) {
+                console.error('ERROR:', error);
+                document.getElementById('response').innerText = 'An error occurred. Please try again.';
+            }
+        }
+    </script>
 </head>
 <body>
     <h1>LOGIN</h1>
 
-    <form method="post" action="/login">
-        <label>User : <input name="username"></label> <br>
-        <label>Password : <input name="password" type="password"> </label> <br>
-        <button type="submit">Login</button>
-    </form>
+     <form onsubmit="login(event)">
+            <label>User: <input id="username" name="username"></label><br>
+            <label>Password: <input id="password" name="password" type="password"></label><br>
+            <button type="submit">Login</button>
+     </form>
 
 </body>
 </html>

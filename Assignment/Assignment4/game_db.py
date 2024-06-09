@@ -2,10 +2,13 @@ import os, pprint, sqlite3
 
 
 def open_database(path = 'game.db'):
+    # if game.db doesn't exist, make file
     new = not os.path.exists(path)
+    # connect sqlite
     db = sqlite3.connect(path)
 
-    if new :
+    # make game TABLE
+    if new:
         c = db.cursor()
         c.execute('CREATE TABLE game ( id INTEGER PRIMARY KEY,'
                   ' username TEXT NOT NULL, password TEXT, score INTEGER)')

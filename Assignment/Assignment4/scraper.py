@@ -8,7 +8,7 @@ def verify_request(url):
     # check that the url is valid
     try:
         parsed_url = urlparse(url)
-        # Check if the url has the correct path
+        # check if the url has the correct path
         return (parsed_url.scheme == 'https' and
                 parsed_url.netloc == 'en.wikipedia.org' and
                 parsed_url.path.startswith('/wiki/'))
@@ -45,15 +45,15 @@ def save_to_csv(title, first_paragraph, filename='Wikipedia_Content.csv'):
 if __name__ == '__main__':
     while True:
         # get url from user
-        url = input("Wikipedia URL: ")
-        if verify_request(url) :
+        url = input("Input: \nWikipedia URL: \n")
+        if verify_request(url):
             # if url is valid, break loop
             break
-        else :
+        else:
             # if user enter invalid url, print error message
             print("Invalid URL! Plase Enter Valid URL Again.")
 
-    # get url's information
+    # get url's data
     title, first_paragraph = scrap(url)
     # save data in csv file
     save_to_csv(title, first_paragraph)
